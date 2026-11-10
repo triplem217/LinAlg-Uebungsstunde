@@ -1,9 +1,9 @@
 (() => {
   "use strict";
 
-  // Zweistöckiges Gebäude unter einem Windstoss.
-  // Modell: A·x = b mit A = [[k1+k2, -k2], [-k2, k2]], gelöst über A = L·R.
-  // Der Windstoss ist temporär: Auslenkung steigt bis x (Maximum) und das Haus schwingt danach zurück.
+  // Zwei Federn in Serie: Boden – Feder k₁ – Platte 1 – Feder k₂ – Platte 2.
+  // Modell: A·x = b mit A = [[k1+k2, -k2], [-k2, k2]], gelöst über A = L·R (x nach unten positiv).
+  // Der Stoss ist temporär: Die Platten sinken bis x (Maximum) und kehren danach in die Ruhelage zurück.
 
   const root = document.getElementById("linlab-app");
   const panel = root.querySelector('[data-application-panel="lr"]');
@@ -11,12 +11,12 @@
   const ctx = canvas.getContext("2d");
   const storageKey = "linlab-lr-building-v2";
 
-  // Federkonstanten der beiden Stockwerke in kN/cm (fest).
+  // Federkonstanten in kN/cm (fest).
   const k1 = 30;
   const k2 = 20;
   const A = [[k1 + k2, -k2], [-k2, k2]];
   const B_MAX = 100;
-  const defaults = { b1: 40, b2: 40, speed: 1, model: "house" };
+  const defaults = { b1: 40, b2: 40, speed: 1 };
   const state = { ...defaults };
 
   try {
@@ -25,16 +25,8 @@
       state.b1 = clamp(Number(saved.b1), -B_MAX, B_MAX, defaults.b1);
       state.b2 = clamp(Number(saved.b2), -B_MAX, B_MAX, defaults.b2);
       state.speed = [1, 0.5, 0.25].includes(saved.speed) ? saved.speed : 1;
-      state.model = saved.model === "springs" ? "springs" : "house";
     }
   } catch (_) { /* Speichern ist optional. */ }
-
-  // Beschriftungen je Modell (Haus: seitliche Windkräfte, Federn: senkrechte Kräfte auf Platten)
-  const TEXT = {
-    house: { title: "Gebäude unter Windlast", load: "Windstösse", name: "Etage", hint: "Negative Werte: Wind von rechts.", gust: "Windstoss", pos: "→", neg: "←" },
-    springs: { title: "Zwei Federn unter Last", load: "Kräfte", name: "Platte", hint: "Negative Werte: Zug nach oben.", gust: "Stoss", pos: "↓", neg: "↑" }
-  };
-  const txt = () => TEXT[state.model];
 
   // LR-Zerlegung von A (einmalig, A ist fest).
   const l21 = A[1][0] / A[0][0];
@@ -61,27 +53,27 @@
     return v.toLocaleString("de-CH", { minimumFractionDigits: digits, maximumFractionDigits: digits });
   };
 
-  // Virtuelle Zeichenfläche: oben das Haus, unten der Zeitverlauf
+  // Virtuelle Zeichenfläche: oben die Federn, unten der Zeitverlauf
   const W = 900;
   const H = 760;
-  const G = { baseX: 450, half: 150, groundY: 470, slabY: [276, 82], scale: 16 };
+  const SCALE = 16;            // Pixel pro cm Verschiebung (überhöht)
   const P = { x0: 78, x1: 860, y0: 560, y1: 728 };
 
-  // Zeitplan des Windstosses (Simulationszeit in ms)
+  // Zeitplan des Stosses (Simulationszeit in ms)
   const T_STAND = 600;
   const T_RISE = 800;
   const T_HOLD = 600;
-  const T_WIND_OFF = 600;      // Wind fällt in 0.6 s ab → Windstoss dauert total 2 s
-  const T_FALL = 900;          // Wind flaut ab, Haus kehrt fast direkt in die Ruhelage zurück
+  const T_WIND_OFF = 600;      // Kraft fällt in 0.6 s ab → Stoss dauert total 2 s
+  const T_FALL = 900;          // Kraft fällt ab, Platten kehren fast direkt in die Ruhelage zurück
   const T_PEAK = T_STAND + T_RISE;
   const T_RELEASE = T_PEAK + T_HOLD;
   const T_END = T_RELEASE + T_FALL;
 
   let displayX = [0, 0];
-  let maxX = null;             // grösste Auslenkung des letzten Windstosses
+  let maxX = null;             // grösste Auslenkung des letzten Stosses
   let history = [];            // [{t, x1, x2}]
-  let wind = 0;                // 0..1, Stärke des Windes im Bild
-  let preview = true;          // Windpfeile gestrichelt (noch nicht gestartet)
+  let wind = 0;                // 0..1, momentane Stärke der Kräfte im Bild
+  let preview = true;          // Kraftpfeile gestrichelt (noch nicht gestartet)
   let anim = null;             // {t, target, mode}
   let lastNow = null;
   let drag = null;
@@ -137,12 +129,6 @@
       grid-template-columns: repeat(3, 1fr);
       gap: 6px;
     }
-    #linlab-app .lr-model {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6px;
-    }
-    #linlab-app .lr-model button[aria-pressed="true"],
     #linlab-app .lr-speed button[aria-pressed="true"] {
       color: #fff;
       border-color: var(--accent);
@@ -199,18 +185,12 @@
     speed: [...root.querySelectorAll("[data-lr-speed]")],
     play: root.querySelector("#lr-play"),
     skip: root.querySelector("#lr-skip"),
-    status: root.querySelector("#lr-status"),
-    model: [...root.querySelectorAll("[data-lr-model]")],
-    title: root.querySelector("#lr-title"),
-    loadTitle: root.querySelector("#lr-load-title"),
-    hint: root.querySelector("#lr-hint"),
-    names: [...root.querySelectorAll("[data-lr-name]")]
   };
 
   function loadLabel(value) {
     const v = Math.round(value);
     if (v === 0) return "0 kN";
-    return `${Math.abs(v)} kN ${v > 0 ? txt().pos : txt().neg}`;
+    return `${Math.abs(v)} kN ${v > 0 ? "↓" : "↑"}`;
   }
 
   const num = value => {
@@ -242,12 +222,6 @@
     els.b1Out.textContent = loadLabel(state.b1);
     els.b2Out.textContent = loadLabel(state.b2);
     els.speed.forEach(btn => btn.setAttribute("aria-pressed", String(Number(btn.dataset.lrSpeed) === state.speed)));
-    els.model.forEach(btn => btn.setAttribute("aria-pressed", String(btn.dataset.lrModel === state.model)));
-    const t = txt();
-    if (els.title) els.title.textContent = t.title;
-    if (els.loadTitle) els.loadTitle.textContent = t.load;
-    if (els.hint) els.hint.textContent = t.hint;
-    els.names.forEach(el => { el.textContent = `${t.name} ${el.dataset.lrName}`; });
     syncSystem();
     syncReadout();
   }
@@ -258,8 +232,6 @@
     els.x1Max.textContent = maxX ? `max ${fmt(maxX[0])} cm` : "max –";
     els.x2Max.textContent = maxX ? `max ${fmt(maxX[1])} cm` : "max –";
   }
-
-  function setStatus(text) { if (els.status) els.status.textContent = text; }
 
   function persist() {
     try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch (_) { /* optional */ }
@@ -284,7 +256,6 @@
     wind = 0;
     preview = true;
     setPlayIdle();
-    setStatus("Haus in Ruhe");
     syncReadout();
     dirty = true;
   }
@@ -298,12 +269,11 @@
     wind = 0;
     preview = false;
     setPlayIcon(true);
-    setStatus("Haus steht");
     dirty = true;
   }
 
   const smooth = t => t * t * (3 - 2 * t);
-  // Nach dem Windstoss: gedämpftes Zurückschwingen in die Ruhelage
+  // Nach dem Stoss: kurzes Zurückschwingen in die Ruhelage
   const swayBack = u => (1 - u) * (1 - u) * Math.cos(0.9 * Math.PI * u);
 
   function sample(t, target) {
@@ -323,14 +293,6 @@
     return { x: target.map(v => v * factor), w };
   }
 
-  function statusFor(t) {
-    if (t < T_STAND) return "Haus steht";
-    if (t < T_PEAK) return "Windstoss nimmt zu";
-    if (t < T_RELEASE) return "Maximale Auslenkung";
-    if (t < T_RELEASE + T_WIND_OFF) return "Wind lässt nach";
-    return "Haus schwingt zurück";
-  }
-
   function updateAnimation(now) {
     const dt = lastNow === null ? 0 : Math.min(50, Math.max(0, now - lastNow));
     lastNow = now;
@@ -343,13 +305,11 @@
       history.push({ t: anim.t, x1: x[0], x2: x[1] });
       maxX = maxX.map((m, i) => Math.abs(x[i]) > Math.abs(m) ? x[i] : m);
     }
-    setStatus(statusFor(anim.t));
     if (anim.t >= T_END) {
       anim = null;
       displayX = [0, 0];
       wind = 0;
       setPlayIdle();
-      setStatus("Wieder in Ruhe");
     }
     syncReadout();
     dirty = true;
@@ -358,198 +318,14 @@
   // ---------- Zeichnen ----------
   function palette(night) {
     return night ? {
-      ink: "#e4e8e9", muted: "#8f999c", ghost: "rgba(220,230,232,.28)", grid: "rgba(255,255,255,.08)",
-      facade: "#2d3537", facadeEdge: "#aab6ba", window: "#2a4a50", windowEdge: "#6f8f95",
+      ink: "#e4e8e9", muted: "#8f999c", grid: "rgba(255,255,255,.08)", spring: "#aab6ba",
       slab: "#8c999d", slabText: "#172023", ground: "#6d777a",
-      wind: "#f0b07d", windBand: "rgba(240,176,125,.10)", f1: "#73c5bc", f2: "#9fb6f0", door: "#5b4a3d", chip: "#1f2527"
+      wind: "#f0b07d", windBand: "rgba(240,176,125,.10)", f1: "#73c5bc", f2: "#9fb6f0", chip: "#1f2527"
     } : {
-      ink: "#25333b", muted: "#718086", ghost: "rgba(37,51,59,.28)", grid: "rgba(37,51,59,.08)",
-      facade: "#f4f1ea", facadeEdge: "#53646b", window: "#cfe6ea", windowEdge: "#7d9aa1",
+      ink: "#25333b", muted: "#718086", grid: "rgba(37,51,59,.08)", spring: "#53646b",
       slab: "#53646b", slabText: "#ffffff", ground: "#8a969a",
-      wind: "#c46335", windBand: "rgba(196,99,53,.08)", f1: "#008f8c", f2: "#3f63b8", door: "#9a7457", chip: "#ffffff"
+      wind: "#c46335", windBand: "rgba(196,99,53,.08)", f1: "#008f8c", f2: "#3f63b8", chip: "#ffffff"
     };
-  }
-
-  function facadePoint(i, t, ox, d) {
-    const levels = [G.groundY, G.slabY[0], G.slabY[1]];
-    const y = levels[i] + (levels[i + 1] - levels[i]) * t;
-    const x = G.baseX + ox + d[i] + (d[i + 1] - d[i]) * smooth(t);
-    return [x, y];
-  }
-
-  function edgePath(i, ox, d, n = 24, reverse = false) {
-    for (let j = 0; j <= n; j++) {
-      const t = (reverse ? n - j : j) / n;
-      const [x, y] = facadePoint(i, t, ox, d);
-      j || reverse ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-    }
-  }
-
-  function drawStorey(i, d, c) {
-    ctx.beginPath();
-    edgePath(i, -G.half, d);
-    edgePath(i, G.half, d, 24, true);
-    ctx.closePath();
-    ctx.fillStyle = c.facade;
-    ctx.fill();
-
-    ctx.strokeStyle = c.facadeEdge;
-    ctx.lineWidth = 7;
-    ctx.lineCap = "butt";
-    [-G.half + 3, G.half - 3].forEach(ox => {
-      ctx.beginPath();
-      edgePath(i, ox, d);
-      ctx.stroke();
-    });
-
-    const openings = i === 0
-      ? [[-92, 26, 0.30, 0.74, "window"], [0, 24, 0.0, 0.62, "door"], [92, 26, 0.30, 0.74, "window"]]
-      : [[-92, 26, 0.30, 0.74, "window"], [0, 26, 0.30, 0.74, "window"], [92, 26, 0.30, 0.74, "window"]];
-    openings.forEach(([cx, hw, t0, t1, kind]) => {
-      const p = [
-        facadePoint(i, t0, cx - hw, d), facadePoint(i, t0, cx + hw, d),
-        facadePoint(i, t1, cx + hw, d), facadePoint(i, t1, cx - hw, d)
-      ];
-      ctx.beginPath();
-      p.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
-      ctx.closePath();
-      ctx.fillStyle = kind === "door" ? c.door : c.window;
-      ctx.fill();
-      ctx.strokeStyle = c.windowEdge;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      if (kind === "window") {
-        const [bx, by] = facadePoint(i, t0, cx, d);
-        const [tx, ty] = facadePoint(i, t1, cx, d);
-        const [lx, ly] = facadePoint(i, (t0 + t1) / 2, cx - hw, d);
-        const [rx, ry] = facadePoint(i, (t0 + t1) / 2, cx + hw, d);
-        ctx.beginPath();
-        ctx.moveTo(bx, by); ctx.lineTo(tx, ty);
-        ctx.moveTo(lx, ly); ctx.lineTo(rx, ry);
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      }
-    });
-  }
-
-  function drawSlab(level, dx, c, roof) {
-    const y = G.slabY[level];
-    const half = G.half + 14;
-    const thick = roof ? 20 : 16;
-    const x = G.baseX + dx;
-    ctx.fillStyle = c.slab;
-    ctx.fillRect(x - half, y - thick / 2, half * 2, thick);
-    if (roof) {
-      ctx.fillRect(x - half, y - thick / 2 - 14, 8, 14);
-      ctx.fillRect(x + half - 8, y - thick / 2 - 14, 8, 14);
-    }
-    ctx.fillStyle = c.slabText;
-    ctx.font = "700 12px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(`Etage ${level + 1}`, x, y + 1);
-  }
-
-  function arrow(x1, y, x2, color, width, head = 16) {
-    const dir = Math.sign(x2 - x1) || 1;
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = width;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(x1, y);
-    ctx.lineTo(x2 - dir * head * 0.6, y);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x2, y);
-    ctx.lineTo(x2 - dir * head, y - head * 0.6);
-    ctx.lineTo(x2 - dir * head, y + head * 0.6);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  function drawWind(level, load, dx, c) {
-    if (Math.abs(load) < 0.5) return;
-    const strength = preview ? 1 : wind;
-    if (strength < 0.02) return;
-    const y = G.slabY[level];
-    const dir = Math.sign(load);
-    const edge = G.baseX + dx - dir * (G.half + 14);
-    const tip = edge - dir * 10;
-    const length = (50 + Math.abs(load) * 1.7) * strength;
-    const tail = tip - dir * length;
-    const name = level === 0 ? "b₁" : "b₂";
-
-    ctx.save();
-    if (preview) {
-      ctx.globalAlpha = 0.35;
-      ctx.setLineDash([10, 8]);
-    }
-    arrow(tail, y, tip, c.wind, 7, 18);
-    ctx.setLineDash([]);
-    if (!preview && length > 30) {
-      ctx.strokeStyle = c.wind;
-      ctx.lineWidth = 2.5;
-      ctx.globalAlpha = 0.55;
-      [-22, 22].forEach((off, k) => {
-        const a = tail + dir * 8;
-        const b = tail + dir * Math.min(length * 0.55, 90) + dir * k * 10;
-        ctx.beginPath();
-        ctx.moveTo(a, y + off);
-        ctx.bezierCurveTo(a + dir * 20, y + off - 6, b - dir * 20, y + off + 6, b, y + off);
-        ctx.stroke();
-      });
-    }
-    ctx.restore();
-
-    ctx.save();
-    ctx.fillStyle = c.wind;
-    ctx.globalAlpha = preview ? 0.6 : Math.min(1, strength * 1.5);
-    ctx.font = "700 17px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
-    ctx.fillText(`${name} = ${Math.round(Math.abs(load))} kN`, tip - dir * Math.max(length, 60) / 2, y - 34);
-    ctx.restore();
-  }
-
-  // Masspfeil von der Ruhelage bis zur (maximalen) Auslenkung
-  function drawDimension(level, value, color, c, prefix) {
-    const dx = value * G.scale;
-    if (Math.abs(dx) < 3) return;
-    const y = G.slabY[level] + 30;
-    const dir = Math.sign(dx);
-    const rest = G.baseX + dir * (G.half + 14);
-    const end = rest + dx;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(rest, G.slabY[level] - 10); ctx.lineTo(rest, y + 8);
-    ctx.moveTo(end, G.slabY[level] + 8); ctx.lineTo(end, y + 8);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.setLineDash([6, 4]);
-    arrow(rest, y, end, color, 2.5, Math.min(11, Math.abs(dx) * 0.6));
-    ctx.setLineDash([]);
-    ctx.font = "700 16px ui-monospace, SFMono-Regular, Menlo, monospace";
-    const label = `${prefix} = ${fmt(value)} cm`;
-    const w = ctx.measureText(label).width;
-    const beside = end + dir * (10 + w);
-    ctx.textBaseline = "middle";
-    let left;
-    let ty;
-    if (beside > 8 && beside < W - 8) {
-      left = dir > 0 ? end + 10 : end - 10 - w;
-      ty = y;
-    } else {
-      left = dir > 0 ? end - w : end;
-      ty = y + 21;
-    }
-    ctx.fillStyle = c.chip;
-    ctx.fillRect(left - 5, ty - 11, w + 10, 22);
-    ctx.fillStyle = color;
-    ctx.textAlign = "left";
-    ctx.fillText(label, left, ty);
   }
 
   // Zeitverlauf x₁(t), x₂(t) mit markiertem Maximum
@@ -559,18 +335,17 @@
     const target = anim ? anim.target : solve(state.b1, state.b2);
     const range = Math.max(1, Math.abs(target[0]), Math.abs(target[1]), ...(maxX || [0]).map(Math.abs)) * 1.2;
     const tx = t => x0 + (x1 - x0) * t / T_END;
-    // Federn: nach unten positiv, also im Diagramm auch nach unten auftragen
-    const flip = state.model === "springs" ? -1 : 1;
-    const ty = v => mid - flip * (v / range) * (y1 - y0) / 2;
+    // x ist nach unten positiv, also im Diagramm auch nach unten auftragen
+    const ty = v => mid + (v / range) * (y1 - y0) / 2;
 
-    // Windstoss-Bereich
+    // Stoss-Bereich
     ctx.fillStyle = c.windBand;
     ctx.fillRect(tx(T_STAND), y0, tx(T_RELEASE + T_WIND_OFF) - tx(T_STAND), y1 - y0);
     ctx.fillStyle = c.wind;
     ctx.font = "600 12px system-ui, sans-serif";
     ctx.textAlign = "left";
-    ctx.textBaseline = "bottom";
-    ctx.fillText(txt().gust, tx(T_STAND) + 6, y1 - 5);
+    ctx.textBaseline = "top";
+    ctx.fillText("Stoss", tx(T_STAND) + 6, y0 + 5);
 
     // Achsen
     ctx.strokeStyle = c.grid;
@@ -596,7 +371,7 @@
     ctx.font = "600 12px system-ui, sans-serif";
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    [[c.f1, `${txt().name} 1 · x₁`], [c.f2, `${txt().name} 2 · x₂`]].forEach(([color, text], k) => {
+    [[c.f1, "Platte 1 · x₁"], [c.f2, "Platte 2 · x₂"]].forEach(([color, text], k) => {
       const lx = x0 + k * 120;
       ctx.strokeStyle = color;
       ctx.lineWidth = 3;
@@ -630,7 +405,7 @@
         ctx.fillStyle = color;
         ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill();
         // Beschriftung am linken Rand über der gestrichelten Linie
-        const outward = (maxX[i] >= 0 ? -1 : 1) * flip;
+        const outward = maxX[i] >= 0 ? 1 : -1;
         const other = maxX[1 - i];
         const inner = Math.abs(other) > Math.abs(maxX[i]) && Math.sign(other) === Math.sign(maxX[i]);
         const dy = (inner ? -outward : outward) * 9;
@@ -660,7 +435,7 @@
 
   // ---------- Federmodell: Boden – Feder k₁ – Platte 1 – Feder k₂ – Platte 2 ----------
   const S = { cx: 450, groundY: 470, restY: [300, 130], half: 120, thick: 18, coil: 44 };
-  const plateY = level => S.restY[level] + displayX[level] * G.scale;   // nach unten positiv
+  const plateY = level => S.restY[level] + displayX[level] * SCALE;   // nach unten positiv
 
   function arrowV(x, y1, y2, color, width, head = 16) {
     const dir = Math.sign(y2 - y1) || 1;
@@ -685,7 +460,7 @@
     const lead = 8;
     const a = yBottom - lead;
     const b = yTop + lead;
-    ctx.strokeStyle = c.facadeEdge;
+    ctx.strokeStyle = c.spring;
     ctx.lineWidth = 3.5;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
@@ -721,6 +496,7 @@
     const length = Math.max(12, Math.min(40 + Math.abs(load) * 1.2, room)) * strength;
     const dir = Math.sign(load);
     // Druck: Pfeil endet auf der Platte. Zug: Pfeil startet an der Platte und zeigt nach oben.
+    // b₁ greift mittig an Platte 1 an und wird deshalb durch die obere Feder hindurch gezeichnet.
     const from = dir > 0 ? top - 4 - length : top - 4;
     const to = dir > 0 ? top - 4 : top - 4 - length;
     ctx.save();
@@ -741,7 +517,7 @@
   }
 
   function drawDimensionV(level, value, color, c, prefix) {
-    const dy = value * G.scale;
+    const dy = value * SCALE;
     if (Math.abs(dy) < 3) return;
     const x = S.cx + S.half + 30 + level * 34;
     const rest = S.restY[level] - S.thick / 2;
@@ -801,39 +577,7 @@
 
   function drawScene(night) {
     const c = palette(night);
-    if (state.model === "springs") {
-      drawSprings(c);
-      drawPlot(c);
-      return;
-    }
-    const d = [0, displayX[0] * G.scale, displayX[1] * G.scale];
-
-    // Boden
-    ctx.fillStyle = c.ground;
-    ctx.fillRect(G.baseX - 300, G.groundY, 600, 6);
-    ctx.strokeStyle = c.ground;
-    ctx.lineWidth = 2;
-    for (let x = G.baseX - 290; x <= G.baseX + 300; x += 26) {
-      ctx.beginPath();
-      ctx.moveTo(x, G.groundY + 6);
-      ctx.lineTo(x - 14, G.groundY + 20);
-      ctx.stroke();
-    }
-
-    drawStorey(0, d, c);
-    drawStorey(1, d, c);
-    drawSlab(0, d[1], c, false);
-    drawSlab(1, d[2], c, true);
-
-    drawWind(0, state.b1, d[1], c);
-    drawWind(1, state.b2, d[2], c);
-
-    // Masspfeile: Maximum, sobald bekannt; beim Ziehen die aktuelle Lage
-    const live = drag || anim || !maxX;   // während der Animation: aktuelle Lage, danach: Maximum
-    const shown = live ? displayX : maxX;
-    drawDimension(0, shown[0], c.f1, c, live ? "x₁" : "x₁,max");
-    drawDimension(1, shown[1], c.f2, c, live ? "x₂" : "x₂,max");
-
+    drawSprings(c);
     drawPlot(c);
   }
 
@@ -862,7 +606,7 @@
     drawScene(night);
   }
 
-  // ---------- Etagen von Hand verschieben ----------
+  // ---------- Platten von Hand verschieben ----------
   function pointer(event) {
     const rect = canvas.getBoundingClientRect();
     return {
@@ -871,16 +615,10 @@
     };
   }
 
-  function hitFloor(p) {
-    if (state.model === "springs") {
-      const hits = [0, 1]
-        .map(level => ({ level, center: plateY(level), y: plateY(level) }))
-        .filter(h => Math.abs(p.y - h.y) <= 30 && Math.abs(p.x - S.cx) <= S.half + 20);
-      return hits.sort((a, b) => Math.abs(p.y - a.y) - Math.abs(p.y - b.y))[0] || null;
-    }
+  function hitPlate(p) {
     const hits = [0, 1]
-      .map(level => ({ level, center: G.baseX + displayX[level] * G.scale, y: G.slabY[level] }))
-      .filter(h => Math.abs(p.y - h.y) <= 42 && Math.abs(p.x - h.center) <= G.half + 30);
+      .map(level => ({ level, y: plateY(level) }))
+      .filter(h => Math.abs(p.y - h.y) <= 30 && Math.abs(p.x - S.cx) <= S.half + 20);
     return hits.sort((a, b) => Math.abs(p.y - a.y) - Math.abs(p.y - b.y))[0] || null;
   }
 
@@ -925,7 +663,7 @@
       scrubTo(p.x);
       return;
     }
-    const hit = hitFloor(p);
+    const hit = hitPlate(p);
     if (!hit) return;
     anim = null;
     preview = false;
@@ -933,7 +671,7 @@
     maxX = null;
     history = [];
     setPlayIdle();
-    drag = { level: hit.level, offset: (state.model === "springs" ? p.y : p.x) - hit.center };
+    drag = { level: hit.level, offset: p.y - hit.y };
     canvas.setPointerCapture(event.pointerId);
     canvas.style.cursor = "grabbing";
   });
@@ -945,13 +683,11 @@
       return;
     }
     if (!drag) {
-      canvas.style.cursor = inPlot(p) ? "ew-resize" : hitFloor(p) ? "grab" : "default";
+      canvas.style.cursor = inPlot(p) ? "ew-resize" : hitPlate(p) ? "grab" : "default";
       return;
     }
     const next = [...displayX];
-    next[drag.level] = state.model === "springs"
-      ? (p.y - drag.offset - S.restY[drag.level]) / G.scale
-      : (p.x - drag.offset - G.baseX) / G.scale;
+    next[drag.level] = (p.y - drag.offset - S.restY[drag.level]) / SCALE;
     // Lasten, die zu dieser Verschiebung gehören: b = A·x (auf Reglerbereich begrenzt)
     const raw = loadsFrom(next);
     const largest = Math.max(Math.abs(raw[0]), Math.abs(raw[1]));
@@ -975,7 +711,7 @@
     drag = null;
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
     canvas.style.cursor = "grab";
-    // Loslassen: Haus schwingt aus der gezogenen Lage zurück
+    // Loslassen: Platten federn aus der gezogenen Lage zurück
     const target = solve(state.b1, state.b2);
     maxX = [...target];
     anim = { t: T_RELEASE, target, mode: "release" };
@@ -998,15 +734,6 @@
       render();
     });
   });
-
-  // Umschalter Haus / Federn: gleiche Zahlen, anderes Bild
-  els.model.forEach(btn => btn.addEventListener("click", () => {
-    state.model = btn.dataset.lrModel === "springs" ? "springs" : "house";
-    syncControls();
-    persist();
-    dirty = true;
-    render();
-  }));
 
   els.speed.forEach(btn => btn.addEventListener("click", () => {
     state.speed = Number(btn.dataset.lrSpeed);
