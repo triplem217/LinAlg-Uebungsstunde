@@ -1205,6 +1205,7 @@
         <button class="tool-btn" type="button" data-application="robot" aria-pressed="false">Robotik: Transformationen</button>
         <button class="tool-btn" type="button" data-application="flow" aria-pressed="false">Massenfluss</button>
         <button class="tool-btn" type="button" data-application="lr" aria-pressed="false">LR-Zerlegung: Federn</button>
+        <button class="tool-btn" type="button" data-application="basis" aria-pressed="false">Basiswechsel</button>
       </section>
     </aside>
 
@@ -1435,6 +1436,75 @@
         </aside>
       </div>
 
+      <div class="apps-board basis-board" data-application-panel="basis" hidden>
+        <section class="basis-visual" aria-label="Koordinatensystem mit veränderbarer Basis">
+          <header class="application-visual-head">
+            <h2>Basiswechsel</h2>
+            <strong class="application-live-value" id="basis-status">det B = 3</strong>
+          </header>
+          <div class="basis-canvas-wrap">
+            <canvas id="basis-canvas" aria-label="Ein Vektor v über dem Standardgitter und dem Gitter der Basis b1, b2. Die Spitzen von v, b1 und b2 lassen sich ziehen."></canvas>
+          </div>
+          <div class="basis-metrics">
+            <div><span>In der Standardbasis E</span><strong id="basis-line-e"></strong></div>
+            <div><span>In der Basis B</span><strong id="basis-line-b"></strong></div>
+          </div>
+        </section>
+
+        <aside class="application-side basis-side">
+          <section class="application-control-section">
+            <h3>Sicht</h3>
+            <div class="basis-segment" role="group" aria-label="Sicht">
+              <button class="quiet-btn" type="button" data-basis-view="e" aria-pressed="true">Standardbasis E</button>
+              <button class="quiet-btn" type="button" data-basis-view="b" aria-pressed="false">Basis B</button>
+            </div>
+            <p class="basis-note">Der Pfeil v bleibt derselbe. Es ändert sich nur, mit welchen Schritten man ihn beschreibt.</p>
+          </section>
+
+          <section class="application-control-section">
+            <h3>Basis wählen</h3>
+            <div class="basis-presets">
+              <button class="quiet-btn" type="button" data-basis-preset="standard">Standard</button>
+              <button class="quiet-btn" type="button" data-basis-preset="skew">Schief</button>
+              <button class="quiet-btn" type="button" data-basis-preset="rotated">Gedreht 30°</button>
+              <button class="quiet-btn" type="button" data-basis-preset="stretched">Gestreckt</button>
+              <button class="quiet-btn" type="button" data-basis-preset="sheared">Geschert</button>
+              <button class="quiet-btn" type="button" data-basis-preset="swapped">Vertauscht</button>
+              <button class="quiet-btn" type="button" data-basis-preset="nearParallel">Fast parallel</button>
+            </div>
+            <p class="basis-warning" id="basis-warning" hidden>Keine Basis: b₁ und b₂ sind parallel. Sie spannen nur noch eine Gerade auf, det B = 0.</p>
+          </section>
+
+          <section class="application-control-section">
+            <h3>Basismatrix</h3>
+            <div class="basis-math" id="basis-matrix"></div>
+          </section>
+
+          <section class="application-control-section">
+            <h3>Umrechnen</h3>
+            <div class="basis-math" id="basis-convert"></div>
+          </section>
+
+          <section class="application-control-section">
+            <h3>v einrasten</h3>
+            <div class="basis-segment" role="group" aria-label="Einrasten">
+              <button class="quiet-btn" type="button" data-basis-snap="off" aria-pressed="false">Frei</button>
+              <button class="quiet-btn" type="button" data-basis-snap="e" aria-pressed="true">E-Gitter</button>
+              <button class="quiet-btn" type="button" data-basis-snap="b" aria-pressed="false">B-Gitter</button>
+            </div>
+          </section>
+
+          <section class="application-control-section">
+            <h3>Anzeige</h3>
+            <label class="checkbox-line" for="basis-show-e">Standardgitter<input id="basis-show-e" type="checkbox" checked></label>
+            <label class="checkbox-line" for="basis-path-e">Weg entlang e₁, e₂<input id="basis-path-e" type="checkbox" checked></label>
+            <label class="checkbox-line" for="basis-path-b">Weg entlang b₁, b₂<input id="basis-path-b" type="checkbox" checked></label>
+            <label class="checkbox-line" for="basis-night-mode-toggle">Nightmode<input id="basis-night-mode-toggle" type="checkbox"></label>
+            <button class="quiet-btn" id="basis-reset" type="button">Zurücksetzen</button>
+          </section>
+        </aside>
+      </div>
+
       <div class="apps-board" data-application-panel="robot" hidden>
         <section class="robot-visual" aria-label="Roboterarm aus verketteten linearen Transformationen">
           <header class="application-visual-head">
@@ -1488,6 +1558,7 @@
 
   <script src="./mass-flow.js?v=2026-10-29-2"></script>
   <script src="./lr-building.js?v=2026-10-29-2"></script>
+  <script src="./basis-change.js?v=2026-11-11-3"></script>
   <script>
     function showLinlabStartupHint(detail = "") {
       if (window.__linlabReady || document.querySelector("[data-startup-hint]")) return;
@@ -1515,7 +1586,7 @@
       hint.innerHTML = `
         <strong>Die App konnte nicht vollständig starten.</strong>${fileNote}<br>
         Starte sie im Terminal mit:<br>
-        <code>cd /Users/tinek/Documents/Codex/2026-08-14/ich/outputs</code><br>
+        <code>cd /Users/tinek/Documents/LinAlg-Uebungsstunde</code><br>
         <code>python3 -m http.server 8765</code><br>
         und öffne dann <a href="http://127.0.0.1:8765/linalg-3d-raum.html">http://127.0.0.1:8765/linalg-3d-raum.html</a>.
         ${detail ? `<br><small>${detail}</small>` : ""}
@@ -1542,7 +1613,7 @@
     window.__linlabStarted = true;
     const root = document.getElementById("linlab-app");
     const palette = ["#008f8c", "#d65c3d", "#e3a51a", "#7258c8", "#228c5c", "#2f6fb0"];
-    const applications = ["photo", "neural", "gps", "robot", "flow", "lr"];
+    const applications = ["photo", "neural", "gps", "robot", "flow", "lr", "basis"];
     let activeApplication = "photo";
 
     // Speicher im Browser ist optional (z. B. im privaten Fenster gesperrt).
@@ -1683,6 +1754,8 @@
         window.LinlabMassFlow.render();
       } else if (activeApplication === "lr") {
         window.LinlabLR.render();
+      } else if (activeApplication === "basis") {
+        window.LinlabBasis.render();
       }
     }
 
@@ -1710,6 +1783,7 @@
       if (activeApplication === "robot") updateRobotAnimation(now);
       if (activeApplication === "flow") window.LinlabMassFlow.render(now);
       if (activeApplication === "lr") window.LinlabLR.render(now);
+      if (activeApplication === "basis") window.LinlabBasis.render(now);
       requestAnimationFrame(animate);
     }
 
@@ -3702,7 +3776,7 @@
     function setNightMode(enabled) {
       const isEnabled = Boolean(enabled);
       root.classList.toggle("night-mode", isEnabled);
-      ["gps", "nn", "photo", "robot", "flow", "lr"].forEach(name => {
+      ["gps", "nn", "photo", "robot", "flow", "lr", "basis"].forEach(name => {
         const toggle = root.querySelector(`#${name}-night-mode-toggle`);
         if (toggle) toggle.checked = isEnabled;
       });
@@ -3714,12 +3788,13 @@
       renderRobot();
       window.LinlabMassFlow.render();
       window.LinlabLR.render();
+      window.LinlabBasis.render();
     }
 
     root.querySelectorAll("[data-application]").forEach(button => {
       button.addEventListener("click", () => setApplication(button.dataset.application));
     });
-    ["gps", "flow", "lr"].forEach(name => {
+    ["gps", "flow", "lr", "basis"].forEach(name => {
       root.querySelector(`#${name}-night-mode-toggle`).addEventListener("change", event => setNightMode(event.currentTarget.checked));
     });
 
