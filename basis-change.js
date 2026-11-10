@@ -305,14 +305,44 @@
   }
 
   // ---------- Bildkoordinaten ----------
+  // In der Basis B wird das Bild gedreht (nicht verzerrt), bis die waagrechte Referenz waagrecht liegt.
+  let viewAngle = 0;             // aktuelle Drehung des Bilds in Radiant
+  let angleFrozen = false;       // während ein Basisvektor gezogen wird
+  const targetAngle = () => {
+    if (!showsB() || isSingular()) return 0;
+    const b = state[reference()];
+    let a = Math.atan2(b[1], b[0]);
+    // kleinste Drehung, die den Vektor waagrecht legt (er darf auch nach links zeigen)
+    if (a > Math.PI / 2) a -= Math.PI;
+    if (a < -Math.PI / 2) a += Math.PI;
+    return -a;
+  };
+  viewAngle = targetAngle();     // beim Laden direkt richtig stehen, ohne Schwenk
+  // Weiche Drehung: sanft anfahren und abbremsen, nie springen.
+  const TURN_MS = 900;
+  let turn = null;               // { from, to, start }
+  const easeInOut = t => t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2;
+  function stepView(now) {
+    if (angleFrozen) return;
+    const target = targetAngle();
+    const goal = turn ? turn.to : viewAngle;
+    if (Math.abs(target - goal) > 1e-6) turn = { from: viewAngle, to: target, start: now };
+    if (!turn) return;
+    const t = Math.min(1, (now - turn.start) / TURN_MS);
+    viewAngle = turn.from + (turn.to - turn.from) * easeInOut(t);
+    if (t >= 1) turn = null;
+    dirty = true;
+  }
+  const rotate = (p, a) => [p[0] * Math.cos(a) - p[1] * Math.sin(a), p[0] * Math.sin(a) + p[1] * Math.cos(a)];
   const unit = () => Math.min(size.w, size.h) / 9;
   const toScreen = p => {
     const u = unit();
-    return [size.w / 2 + p[0] * u, size.h / 2 - p[1] * u];
+    const q = rotate(p, viewAngle);
+    return [size.w / 2 + q[0] * u, size.h / 2 - q[1] * u];
   };
   const toWorld = s => {
     const u = unit();
-    return [(s[0] - size.w / 2) / u, (size.h / 2 - s[1]) / u];
+    return rotate([(s[0] - size.w / 2) / u, (size.h / 2 - s[1]) / u], -viewAngle);
   };
 
   // ---------- Zeichnen ----------
@@ -627,13 +657,14 @@
     ctx.fillStyle = c.e;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    const hint = showsE() ? "Standardbasis ε" : singular ? "Keine Basis" : `Basis B · waagrechte Referenz: ${ref === "b1" ? "b₁" : "b₂"}`;
+    const hint = showsE() ? "Standardbasis ε" : singular ? "Keine Basis" : `Basis B · ${ref === "b1" ? "b₁" : "b₂"} liegt waagrecht`;
     ctx.fillText(hint, 14, 12);
     ctx.restore();
   }
 
   function render(now = performance.now()) {
     if (panel.hidden || !root.classList.contains("applications-active")) return;
+    stepView(now);
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -687,6 +718,8 @@
     const key = hit(pointer(event));
     if (!key) return;
     drag = key;
+    // Die Drehung hängt von der Basis ab: während des Ziehens eines Basisvektors festhalten.
+    angleFrozen = key !== "v";
     canvas.setPointerCapture(event.pointerId);
     canvas.style.cursor = "grabbing";
     dirty = true;
@@ -706,6 +739,7 @@
   function release(event) {
     if (!drag) return;
     drag = null;
+    angleFrozen = false;
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
     canvas.style.cursor = hover ? "grab" : "default";
     persist();
