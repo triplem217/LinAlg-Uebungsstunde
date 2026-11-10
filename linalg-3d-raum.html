@@ -1446,7 +1446,7 @@
             <canvas id="basis-canvas" aria-label="Ein Vektor v über dem Standardgitter und dem Gitter der Basis b1, b2. Die Spitzen von v, b1 und b2 lassen sich ziehen."></canvas>
           </div>
           <div class="basis-metrics">
-            <div><span>In der Standardbasis E</span><strong id="basis-line-e"></strong></div>
+            <div><span>In der Standardbasis ε</span><strong id="basis-line-e"></strong></div>
             <div><span>In der Basis B</span><strong id="basis-line-b"></strong></div>
           </div>
         </section>
@@ -1455,10 +1455,29 @@
           <section class="application-control-section">
             <h3>Sicht</h3>
             <div class="basis-segment" role="group" aria-label="Sicht">
-              <button class="quiet-btn" type="button" data-basis-view="e" aria-pressed="true">Standardbasis E</button>
+              <button class="quiet-btn" type="button" data-basis-view="e" aria-pressed="true">Standardbasis ε</button>
               <button class="quiet-btn" type="button" data-basis-view="b" aria-pressed="false">Basis B</button>
             </div>
+          </section>
+
+          <section class="application-control-section">
+            <h3>v beschreiben in</h3>
+            <div class="basis-segment" role="group" aria-label="Beschreibung von v">
+              <button class="quiet-btn" type="button" data-basis-describe="e" aria-pressed="false">Basis ε</button>
+              <button class="quiet-btn" type="button" data-basis-describe="b" aria-pressed="true">Basis B</button>
+              <button class="quiet-btn" type="button" data-basis-describe="both" aria-pressed="false">Beide</button>
+            </div>
             <p class="basis-note">Der Pfeil v bleibt derselbe. Es ändert sich nur, mit welchen Schritten man ihn beschreibt.</p>
+          </section>
+
+          <section class="application-control-section">
+            <h3>Vektoren eingeben</h3>
+            <div class="basis-vectors">
+              <label class="basis-vector-row"><span class="basis-vector-name bs-b1">b₁</span><span>(</span><input type="text" inputmode="decimal" autocomplete="off" data-basis-input="b1.0" aria-label="b1, erste Komponente"><input type="text" inputmode="decimal" autocomplete="off" data-basis-input="b1.1" aria-label="b1, zweite Komponente"><span>)</span></label>
+              <label class="basis-vector-row"><span class="basis-vector-name bs-b2">b₂</span><span>(</span><input type="text" inputmode="decimal" autocomplete="off" data-basis-input="b2.0" aria-label="b2, erste Komponente"><input type="text" inputmode="decimal" autocomplete="off" data-basis-input="b2.1" aria-label="b2, zweite Komponente"><span>)</span></label>
+              <label class="basis-vector-row"><span class="basis-vector-name bs-v">v</span><span>(</span><input type="text" inputmode="decimal" autocomplete="off" data-basis-input="v.0" aria-label="v, erste Komponente"><input type="text" inputmode="decimal" autocomplete="off" data-basis-input="v.1" aria-label="v, zweite Komponente"><span>)</span></label>
+            </div>
+            <p class="basis-note">Komponenten in der Standardbasis ε.</p>
           </section>
 
           <section class="application-control-section">
@@ -1489,7 +1508,7 @@
             <h3>v einrasten</h3>
             <div class="basis-segment" role="group" aria-label="Einrasten">
               <button class="quiet-btn" type="button" data-basis-snap="off" aria-pressed="false">Frei</button>
-              <button class="quiet-btn" type="button" data-basis-snap="e" aria-pressed="true">E-Gitter</button>
+              <button class="quiet-btn" type="button" data-basis-snap="e" aria-pressed="true">ε-Gitter</button>
               <button class="quiet-btn" type="button" data-basis-snap="b" aria-pressed="false">B-Gitter</button>
             </div>
           </section>
@@ -1497,8 +1516,6 @@
           <section class="application-control-section">
             <h3>Anzeige</h3>
             <label class="checkbox-line" for="basis-show-e">Standardgitter<input id="basis-show-e" type="checkbox" checked></label>
-            <label class="checkbox-line" for="basis-path-e">Weg entlang e₁, e₂<input id="basis-path-e" type="checkbox" checked></label>
-            <label class="checkbox-line" for="basis-path-b">Weg entlang b₁, b₂<input id="basis-path-b" type="checkbox" checked></label>
             <label class="checkbox-line" for="basis-night-mode-toggle">Nightmode<input id="basis-night-mode-toggle" type="checkbox"></label>
             <button class="quiet-btn" id="basis-reset" type="button">Zurücksetzen</button>
           </section>
@@ -1558,7 +1575,7 @@
 
   <script src="./mass-flow.js?v=2026-10-29-2"></script>
   <script src="./lr-building.js?v=2026-10-29-2"></script>
-  <script src="./basis-change.js?v=2026-11-11-3"></script>
+  <script src="./basis-change.js?v=2026-11-11-4"></script>
   <script>
     function showLinlabStartupHint(detail = "") {
       if (window.__linlabReady || document.querySelector("[data-startup-hint]")) return;

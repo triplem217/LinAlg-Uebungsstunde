@@ -24,7 +24,7 @@
   };
   const defaults = () => ({
     b1: [2, 1], b2: [-1, 1], v: [3, 3],
-    snap: "e", viewB: false, showE: true, pathE: true, pathB: true
+    snap: "e", viewB: false, showE: true, describe: "b"
   });
   const state = defaults();
 
@@ -38,7 +38,8 @@
     if (saved) {
       ["b1", "b2", "v"].forEach(key => { if (isPair(saved[key])) state[key] = saved[key].map(n => Math.max(-LIMIT, Math.min(LIMIT, n))); });
       if (["off", "e", "b"].includes(saved.snap)) state.snap = saved.snap;
-      ["viewB", "showE", "pathE", "pathB"].forEach(key => { if (typeof saved[key] === "boolean") state[key] = saved[key]; });
+      if (["e", "b", "both"].includes(saved.describe)) state.describe = saved.describe;
+      ["viewB", "showE"].forEach(key => { if (typeof saved[key] === "boolean") state[key] = saved[key]; });
     }
   } catch (_) { /* Speichern ist optional. */ }
 
@@ -54,7 +55,10 @@
   const mix = (a, b, t) => a.map((value, i) => value + (b[i] - value) * t);
   const len = p => Math.hypot(p[0], p[1]);
   // «Keine Basis», sobald der Winkel zwischen b₁ und b₂ unter ca. 2° fällt.
-  const isSingular = () => Math.abs(det(basisMatrix())) < 0.035 * len(state.b1) * len(state.b2);
+  const isSingular = () => Math.abs(det(basisMatrix())) <= 0.035 * len(state.b1) * len(state.b2) + 1e-9;
+  // In welcher Basis v gerade beschrieben wird: nur ε, nur B oder beide
+  const showsE = () => state.describe !== "b";
+  const showsB = () => state.describe !== "e";
   const componentsB = () => {
     if (isSingular()) return null;
     return apply(inverse(basisMatrix()), state.v);
@@ -164,6 +168,40 @@
       line-height: 1.35;
     }
     #linlab-app .basis-warning[hidden] { display: none; }
+    #linlab-app .basis-metrics > div { transition: opacity 0.2s; }
+    #linlab-app .basis-metrics > div.is-dimmed { opacity: 0.28; }
+    #linlab-app .basis-vectors {
+      display: grid;
+      gap: 7px;
+    }
+    #linlab-app .basis-vector-row {
+      display: grid;
+      grid-template-columns: 34px auto minmax(0, 1fr) minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      font: 700 16px ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    #linlab-app .basis-vector-row > span:not(.basis-vector-name) { color: var(--muted); font-weight: 400; font-size: 20px; }
+    #linlab-app .basis-vector-row input {
+      width: 100%;
+      min-width: 0;
+      padding: 7px 8px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--ink);
+      background: var(--panel);
+      font: 600 15px ui-monospace, SFMono-Regular, Menlo, monospace;
+      text-align: center;
+    }
+    #linlab-app .basis-vector-row input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0, 143, 140, 0.14);
+    }
+    #linlab-app .basis-vector-row input[aria-invalid="true"] {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 3px rgba(185, 50, 50, 0.14);
+    }
   `;
   root.prepend(style);
 
@@ -179,8 +217,8 @@
     presets: [...root.querySelectorAll("[data-basis-preset]")],
     snap: [...root.querySelectorAll("[data-basis-snap]")],
     showE: root.querySelector("#basis-show-e"),
-    pathE: root.querySelector("#basis-path-e"),
-    pathB: root.querySelector("#basis-path-b"),
+    describe: [...root.querySelectorAll("[data-basis-describe]")],
+    inputs: [...root.querySelectorAll("[data-basis-input]")],
     reset: root.querySelector("#basis-reset")
   };
 
@@ -239,13 +277,13 @@
       const colB = mcol(`<mrow class="bs-b1">${mnum(c[0])}</mrow>`, `<mrow class="bs-b2">${mnum(c[1])}</mrow>`);
       els.convert.innerHTML = `
         <math display="block">
-          <mrow>${coords("E")}<mo>=</mo><mi>B</mi><mo>·</mo>${coords("B")}</mrow>
+          <mrow>${coords("ε")}<mo>=</mo><mi>B</mi><mo>·</mo>${coords("B")}</mrow>
         </math>
         <math display="block">
           <mrow>${colE}<mo>=</mo>${mmat(B.map(mnum), true)}<mo>·</mo>${colB}</mrow>
         </math>
         <math display="block" style="margin-top:20px">
-          <mrow>${coords("B")}<mo>=</mo>${B_INV}<mo>·</mo>${coords("E")}</mrow>
+          <mrow>${coords("B")}<mo>=</mo>${B_INV}<mo>·</mo>${coords("ε")}</mrow>
         </math>
         <math display="block">
           <mrow>${colB}<mo>=</mo>${mmat(inverse(B).map(mnum), false)}<mo>·</mo>${colE}</mrow>
@@ -253,20 +291,38 @@
     } else {
       els.convert.innerHTML = `
         <math display="block">
-          <mrow>${coords("B")}<mo>=</mo>${B_INV}<mo>·</mo>${coords("E")}</mrow>
+          <mrow>${coords("B")}<mo>=</mo>${B_INV}<mo>·</mo>${coords("ε")}</mrow>
         </math>
         <math display="block">
           <mrow>${B_INV}<mtext>&nbsp;existiert nicht</mtext></mrow>
         </math>`;
     }
+    syncInputs();
   }
+
+  // Eingabefelder der Vektoren; das Feld, in dem gerade getippt wird, bleibt unberührt.
+  const plain = value => String(Math.round(value * 1000) / 1000).replace("-", "−");
+  function syncInputs() {
+    els.inputs.forEach(input => {
+      if (input === document.activeElement) return;
+      const [key, index] = input.dataset.basisInput.split(".");
+      input.value = plain(state[key][Number(index)]);
+      input.removeAttribute("aria-invalid");
+    });
+  }
+  const parseNumber = text => {
+    const cleaned = text.trim().replace("−", "-").replace(",", ".");
+    if (!/^[-+]?(\d+\.?\d*|\.\d+)$/.test(cleaned)) return null;
+    return Number(cleaned);
+  };
 
   function syncControls() {
     els.view.forEach(btn => btn.setAttribute("aria-pressed", String((btn.dataset.basisView === "b") === state.viewB)));
     els.snap.forEach(btn => btn.setAttribute("aria-pressed", String(btn.dataset.basisSnap === state.snap)));
+    els.describe.forEach(btn => btn.setAttribute("aria-pressed", String(btn.dataset.basisDescribe === state.describe)));
     els.showE.checked = state.showE;
-    els.pathE.checked = state.pathE;
-    els.pathB.checked = state.pathB;
+    els.lineE.parentElement.classList.toggle("is-dimmed", !showsE());
+    els.lineB.parentElement.classList.toggle("is-dimmed", !showsB());
   }
 
   // ---------- Ansicht ----------
@@ -556,13 +612,13 @@
     }
 
     // Achsenzahlen
-    if (state.showE) {
+    if (state.showE && showsE()) {
       drawTicks([1, 0], [0, 1], c.e, 0);
       drawTicks([0, 1], [1, 0], c.e, 0);
     }
-    if (!singular) {
+    if (!singular && showsB()) {
       // Liegt eine B-Achse auf einer E-Achse, rücken ihre Zahlen weiter nach aussen.
-      const onAxis = b => state.showE && (Math.abs(b[0]) < 0.12 * len(b) || Math.abs(b[1]) < 0.12 * len(b));
+      const onAxis = b => state.showE && showsE() && (Math.abs(b[0]) < 0.12 * len(b) || Math.abs(b[1]) < 0.12 * len(b));
       drawTicks(state.b1, state.b2, c.b1, onAxis(state.b1) ? 17 : 0);
       drawTicks(state.b2, state.b1, c.b2, onAxis(state.b2) ? 17 : 0);
     }
@@ -570,7 +626,7 @@
     // Vektornamen und Griffe freihalten, bevor die Wege beschriftet werden
     occupied = [];
     const fs = fontScale();
-    const tips = [state.b1, state.b2, state.v].concat(state.showE ? [[1, 0], [0, 1]] : []);
+    const tips = [state.b1, state.b2, state.v].concat(showsE() ? [[1, 0], [0, 1]] : []);
     tips.forEach(p => {
       const s = toScreen(p);
       const at = labelSpot(o, s);
@@ -579,15 +635,15 @@
     });
 
     // Wege
-    if (state.pathE) {
+    if (showsE()) {
       drawPath([1, 0], [0, 1], state.v[0], state.v[1], c.e, c.e, "e", c, { width: 4, dash: [2, 9], alpha: 0.95, labelOffset: 20 });
     }
-    if (state.pathB && comps) {
+    if (showsB() && comps) {
       drawPath(state.b1, state.b2, comps[0], comps[1], c.b1, c.b2, "b", c, { width: 7, dash: null, alpha: 0.5, labelOffset: 22 });
     }
 
     // Basisvektoren
-    if (state.showE) {
+    if (showsE()) {
       const e1 = toScreen([1, 0]);
       const e2 = toScreen([0, 1]);
       arrow(o, e1, c.e, 4);
@@ -622,7 +678,7 @@
     ctx.fillStyle = c.e;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    ctx.fillText(state.viewB && !singular ? "Sicht der Basis B: b₁ und b₂ sind die Achsen" : "Sicht der Standardbasis E", 14, 12);
+    ctx.fillText(state.viewB && !singular ? "Sicht der Basis B: b₁ und b₂ sind die Achsen" : "Sicht der Standardbasis ε", 14, 12);
     ctx.restore();
   }
 
@@ -762,12 +818,36 @@
     persist();
   }));
 
-  [["showE", els.showE], ["pathE", els.pathE], ["pathB", els.pathB]].forEach(([key, input]) => {
-    input.addEventListener("change", () => {
-      state[key] = input.checked;
+  els.showE.addEventListener("change", () => {
+    state.showE = els.showE.checked;
+    dirty = true;
+    persist();
+  });
+
+  els.describe.forEach(btn => btn.addEventListener("click", () => {
+    state.describe = btn.dataset.basisDescribe;
+    syncControls();
+    dirty = true;
+    persist();
+  }));
+
+  // Vektoren von Hand eintragen
+  els.inputs.forEach(input => {
+    const [key, index] = input.dataset.basisInput.split(".");
+    input.addEventListener("input", () => {
+      const value = parseNumber(input.value);
+      if (value === null) { input.setAttribute("aria-invalid", "true"); return; }
+      input.removeAttribute("aria-invalid");
+      basisAnim = null;
+      const next = state[key].slice();
+      next[Number(index)] = Math.max(-LIMIT, Math.min(LIMIT, value));
+      state[key] = next;
+      if (key !== "v" && state.viewB) startViewAnim();
       dirty = true;
       persist();
     });
+    input.addEventListener("blur", () => { dirty = true; syncInputs(); });
+    input.addEventListener("keydown", event => { if (event.key === "Enter") input.blur(); });
   });
 
   els.reset.addEventListener("click", () => {
