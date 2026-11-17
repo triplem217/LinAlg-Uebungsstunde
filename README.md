@@ -52,3 +52,9 @@ lr-building.js      LR-Zerlegung: Federn
 basis-change.js     Basiswechsel
 vendor/three/       three.js r164 (MIT-Lizenz) für die 3D-Ansicht, siehe vendor/three/README.md
 ```
+
+## Lizenz
+
+MIT-Lizenz, © 2026 Martin Maligec, siehe [LICENSE](LICENSE). Der Code darf frei heruntergeladen, verwendet, verändert und weitergegeben werden, solange der Lizenzhinweis erhalten bleibt.
+
+three.js im Ordner `vendor/three/` steht unter der MIT-Lizenz der Three.js Authors.
