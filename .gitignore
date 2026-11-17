@@ -1,1 +1,8 @@
+# Systemdateien von macOS und Windows
 .DS_Store
+._*
+Thumbs.db
+desktop.ini
+
+# Persönliche Einstellungen von Claude Code
+.claude/settings.local.json

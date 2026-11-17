@@ -1565,15 +1565,11 @@
       hint.style.boxShadow = "0 10px 28px rgba(22, 32, 37, 0.14)";
       hint.style.lineHeight = "1.45";
       hint.style.transform = "translateX(-50%)";
-      const fileNote = location.protocol === "file:"
-        ? " Du hast die Datei direkt geöffnet; viele Browser blockieren dabei die lokalen Three.js-Module."
-        : "";
       hint.innerHTML = `
-        <strong>Die App konnte nicht vollständig starten.</strong>${fileNote}<br>
-        Starte sie im Terminal mit:<br>
-        <code>cd /Users/tinek/Documents/LinAlg-Uebungsstunde</code><br>
-        <code>python3 -m http.server 8765</code><br>
-        und öffne dann <a href="http://127.0.0.1:8765/linalg-3d-raum.html">http://127.0.0.1:8765/linalg-3d-raum.html</a>.
+        <strong>Die App konnte nicht vollständig starten.</strong><br>
+        Bitte <code>index.html</code> in einem aktuellen Browser öffnen (Chrome, Edge, Firefox oder Safari)
+        und darauf achten, dass der Ordner <code>vendor</code> daneben liegt.
+        Wurde das Projekt als ZIP heruntergeladen, zuerst entpacken.
         ${detail ? `<br><small>${detail}</small>` : ""}
       `;
       host.appendChild(hint);
@@ -1581,19 +1577,23 @@
 
     window.addEventListener("error", event => {
       if (window.__linlabReady) return;
-      showLinlabStartupHint(event.message || "Das JavaScript-Modul konnte nicht geladen werden.");
+      showLinlabStartupHint(event.message || "Ein Skript konnte nicht geladen werden.");
     }, { once: true });
     window.addEventListener("unhandledrejection", event => {
       if (window.__linlabReady) return;
-      showLinlabStartupHint(event.reason?.message || "Das JavaScript-Modul konnte nicht geladen werden.");
+      showLinlabStartupHint(event.reason?.message || "Ein Skript konnte nicht geladen werden.");
     }, { once: true });
     window.setTimeout(() => {
-      if (!window.__linlabReady) showLinlabStartupHint("Bitte nicht über file:// starten, sondern über den lokalen Server.");
+      if (!window.__linlabReady) showLinlabStartupHint("Die Skripte im Ordner vendor wurden nicht gefunden oder nicht ausgeführt.");
     }, 1200);
   </script>
-  <script type="module">
-    import * as THREE from "./vendor/three/three.module.js";
-    import { OrbitControls } from "./vendor/three/addons/controls/OrbitControls.js";
+  <script src="./vendor/three/three.global.js"></script>
+  <script src="./vendor/three/addons/controls/OrbitControls.global.js"></script>
+  <script>
+  (() => {
+    "use strict";
+    const THREE = window.THREE;
+    const { OrbitControls } = window.THREE;
 
     window.__linlabStarted = true;
     const root = document.getElementById("linlab-app");
@@ -3791,6 +3791,7 @@
     setApplication(storage.get("linlab-active-application") || "photo");
     window.__linlabReady = true;
     animate();
+  })();
   </script>
 </div>
 </body>

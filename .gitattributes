@@ -1,0 +1,8 @@
+# Einheitliche Zeilenenden, egal ob unter macOS oder Windows bearbeitet
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
